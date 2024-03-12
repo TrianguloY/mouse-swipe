@@ -16,7 +16,11 @@ def get_mouses():
     number_of_devices = len(input_devices)
     mouses.clear()
 
+    mouse = None
+    keyboard = None
+
     for input_device in input_devices:
+        logger.info("Found " + input_device.name)
         if input_device.name == "mouse-swipe-virtual-device":
             continue
 
@@ -26,13 +30,25 @@ def get_mouses():
             continue
 
         if ("BTN_RIGHT", 273) in keys:
-            logger.info("Mouse found: " + input_device.name)
-            mouse = Mouse(input_device.name)
-            mouse.input_device = input_device
-            mouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
-            mouse.input_device.grab()
-            mouses.append(mouse)
-            tasks.append(asyncio.create_task(task_handle_mouse_events(mouse)))
+            mouse = input_device
+
+        if ("KEY_LEFTMETA", 125) in keys:
+            keyboard = input_device
+
+        if mouse and keyboard:
+            break
+
+    if not mouse or not keyboard:
+        logger.error("Mouse or keyboard not found")
+        return
+
+    logger.info("Mouse (" + mouse.name + ") and keyboard (" + keyboard.name + ") found")
+    vmouse = Mouse(mouse.name)
+    vmouse.input_device = mouse
+    vmouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
+    vmouse.input_device.grab()
+    mouses.append(vmouse)
+    tasks.append(asyncio.create_task(task_handle_mouse_events(vmouse, keyboard)))
 
 def ungrab_mouses():
     for mouse in mouses:
@@ -55,11 +71,13 @@ def emulate_key_press(keys):
         virtual_device.write(ecodes.EV_KEY, ecodes.ecodes[key], 0)
         virtual_device.syn()
 
-async def task_handle_mouse_events(mouse):
+async def task_handle_mouse_events(mouse, keyboard):
     async for event in mouse.input_device.async_read_loop():
         should_forward = True
 
-        if event.type == ecodes.EV_REL:
+        if keyboard.active_keys():
+            pass
+        elif event.type == ecodes.EV_REL:
             for swipe_button in mouse.swipe_buttons:
                 if swipe_button.pressed:
                     if swipe_button.freeze:
