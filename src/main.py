@@ -16,8 +16,8 @@ def get_mouses():
     number_of_devices = len(input_devices)
     mouses.clear()
 
-    mouse = None
-    keyboard = None
+    vmouses = []
+    vkeyboards = []
 
     for input_device in input_devices:
         logger.info("Found " + input_device.name)
@@ -30,25 +30,19 @@ def get_mouses():
             continue
 
         if ("BTN_RIGHT", 273) in keys:
-            mouse = input_device
+            vmouses.append(input_device)
 
         if ("KEY_LEFTMETA", 125) in keys:
-            keyboard = input_device
+            vkeyboards.append(input_device)
 
-        if mouse and keyboard:
-            break
-
-    if not mouse or not keyboard:
-        logger.error("Mouse or keyboard not found")
-        return
-
-    logger.info("Mouse (" + mouse.name + ") and keyboard (" + keyboard.name + ") found")
-    vmouse = Mouse(mouse.name)
-    vmouse.input_device = mouse
-    vmouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
-    vmouse.input_device.grab()
-    mouses.append(vmouse)
-    tasks.append(asyncio.create_task(task_handle_mouse_events(vmouse, keyboard)))
+    for mouse in vmouses:
+        logger.info("Configuring " + mouse.name)
+        vmouse = Mouse(mouse.name)
+        vmouse.input_device = mouse
+        vmouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
+        vmouse.input_device.grab()
+        mouses.append(vmouse)
+        tasks.append(asyncio.create_task(task_handle_mouse_events(vmouse, vkeyboards)))
 
 def ungrab_mouses():
     for mouse in mouses:
@@ -71,11 +65,11 @@ def emulate_key_press(keys):
         virtual_device.write(ecodes.EV_KEY, ecodes.ecodes[key], 0)
         virtual_device.syn()
 
-async def task_handle_mouse_events(mouse, keyboard):
+async def task_handle_mouse_events(mouse, keyboards):
     async for event in mouse.input_device.async_read_loop():
         should_forward = True
 
-        if keyboard.active_keys():
+        if any(keyboard.active_keys() for keyboard in keyboards):
             pass
         elif event.type == ecodes.EV_REL:
             for swipe_button in mouse.swipe_buttons:
@@ -112,10 +106,10 @@ async def task_handle_mouse_events(mouse, keyboard):
                                 emulate_key_press(swipe_button.swipe_right if swipe_button.deltaX > 0 else swipe_button.swipe_left)
                             else:
                                 emulate_key_press(swipe_button.swipe_down if swipe_button.deltaY > 0 else swipe_button.swipe_up)
-                            
+
                         swipe_button.deltaX = 0
                         swipe_button.deltaY = 0
-            
+
         if should_forward:
             emulate_event(event.type, event.code, event.value)
 
@@ -125,7 +119,7 @@ async def task_detect_new_devices():
         if len(list_devices()) > number_of_devices:
             # Cancel this task to trigger the cancelling of all tasks on gather
             tasks[0].cancel()
-  
+
 def cancel_tasks():
     for task in tasks:
         try:
@@ -141,7 +135,7 @@ def cancel_tasks():
             pass
 
 async def run_tasks():
-    try:            
+    try:
         tasks.clear()
         tasks.append(asyncio.create_task(task_detect_new_devices()))
         get_mouses()
@@ -162,7 +156,7 @@ if __name__ == "__main__":
     except BaseException as e:
         print(e)
         quit()
-        
+
     try:
         virtual_device = create_virtual_device()
         config_swipe_buttons = read_config_file()
