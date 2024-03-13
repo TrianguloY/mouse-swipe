@@ -20,7 +20,6 @@ def get_mouses():
     vkeyboards = []
 
     for input_device in input_devices:
-        logger.info("Found " + input_device.name)
         if input_device.name == "mouse-swipe-virtual-device":
             continue
 
@@ -30,19 +29,21 @@ def get_mouses():
             continue
 
         if ("BTN_RIGHT", 273) in keys:
+            logger.info("Found mouse: " + input_device.name)
             vmouses.append(input_device)
 
         if ("KEY_LEFTMETA", 125) in keys:
+            logger.info("Found keyboard: " + input_device.name)
             vkeyboards.append(input_device)
 
-    for mouse in vmouses:
-        logger.info("Configuring " + mouse.name)
-        vmouse = Mouse(mouse.name)
-        vmouse.input_device = mouse
-        vmouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
-        vmouse.input_device.grab()
-        mouses.append(vmouse)
-        tasks.append(asyncio.create_task(task_handle_mouse_events(vmouse, vkeyboards)))
+    for vmouse in vmouses:
+        logger.info("Configuring " + vmouse.name)
+        mouse = Mouse(vmouse.name)
+        mouse.input_device = vmouse
+        mouse.swipe_buttons = copy.deepcopy(config_swipe_buttons)
+        mouse.input_device.grab()
+        mouses.append(mouse)
+        tasks.append(asyncio.create_task(task_handle_mouse_events(mouse, vkeyboards)))
 
 def ungrab_mouses():
     for mouse in mouses:
